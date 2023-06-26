@@ -33,8 +33,19 @@ namespace ZangTFT
         private static extern int GetWindowThreadProcessId(IntPtr handle, out int processId);
 
         IntPtr LOLWindowHandle;
-        
+        List<Mat> champs = new List<Mat>();
 
+        protected override bool ProcessDialogKey(Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                Application.Exit();
+                this.Close();
+                return true;
+            }
+            else
+                return base.ProcessDialogKey(keyData);
+        }
         public Main()
         {
             InitializeComponent();
@@ -45,9 +56,28 @@ namespace ZangTFT
             LOLWindowHandle = GetLOLWindow();
             if (LOLWindowHandle == IntPtr.Zero)
             {
-                //MessageBox.Show("Cannot find LOL Windows, exit now");
-                //Application.Exit();
+                MessageBox.Show("Cannot find LOL Windows, exit now");
+                Application.Exit();
             }
+
+
+            Mat templ = new Mat();
+            templ = CvInvoke.Imread(@"Champs\Kalista.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Irelia.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\KaiSa.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Maokai.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Samira.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Shen.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Yasuo.png", ImreadModes.Grayscale);
+            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Warwick.png", ImreadModes.Grayscale);
+            champs.Add(templ);
         }
 
         public bool LOLIsActivated()
@@ -61,76 +91,81 @@ namespace ZangTFT
             return activatedHandle == LOLWindowHandle;
         }
 
-        public void Test()
+        public void OpenCVClick()
         {
-            string imageName = "Screenshot\\Giang.png";
+            string imageName = "Screenshot.png";
             int w = 1015;
             int h = 35;
             int left = 472;
             int top = 1042;
             var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
 
-            imageName = "Screenshot\\Giang.png";
-            /*
-            using (Graphics graphics = Graphics.FromImage(bmp))
+            do
             {
-                graphics.CopyFromScreen(left, top, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
-            }
+                using (Graphics graphics = Graphics.FromImage(bmp))
+                {
+                    graphics.CopyFromScreen(left, top, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
+                }
 
-            bmp.Save(imageName, ImageFormat.Png);
-            */
-
-            for (int i = 0; i < 5; i++)
-            {
-                // Create variable for MatchTemplate function
-                Mat templ = CvInvoke.Imread("Jhin.png", ImreadModes.Grayscale);
+                bmp.Save(imageName, ImageFormat.Png);
                 Mat img = CvInvoke.Imread(imageName, ImreadModes.Grayscale);
-                Mat result = new Mat();
 
-                // Find all position matching with template
-
-
-                // MatchTemplate function
-                CvInvoke.MatchTemplate(img, templ, result, TemplateMatchingType.CcoeffNormed);
-
-
-
-                // Normalize the result image into a matrix of floats (thresholds?)
-                double threshold = 0.8;
-                Mat thresholds = new Mat();
-                CvInvoke.Normalize(result, thresholds, 0, 1, Emgu.CV.CvEnum.NormType.MinMax);
-
-                var rectangles = new List<Rectangle>();
-                var size = new Size(templ.Width, templ.Height);
-
-                // Convert it to a multidimensional array to be able to iterate through it
-                // (is it really necessary, isn't something native in EmguCV for this?)
-                var thresholdData = thresholds.GetData();
-                for (int y = 0; y < thresholdData.GetLength(0); y++)
+                foreach (Mat champ in champs)
                 {
-                    for (int x = 0; x < thresholdData.GetLength(1); x++)
-                    {
-                        var value = (float)thresholdData.GetValue(y, x);
-
-                        if (value > threshold)
-                        {
-                            rectangles.Add(new Rectangle(x, y, size.Width, size.Height));
-                        }
-                    }
+                    FindAndClick(champ, img, top, left);
+                    Thread.Sleep(2000); 
                 }
-
-                // Draw rectangles around the matching positions
-                foreach (var rectangle in rectangles)
-                {
-                    CvInvoke.Rectangle(img, rectangle, new MCvScalar(0, 0, 255), 2);
-                }
-
-                // Save the image
-                img.Save("Result\\LOL_Screenshot" + i + ".png");
-
-            }
+                Thread.Sleep(3000);
+            } while (true);
         }
 
+        public void FindAndClick(Mat templ, Mat img, int topStartPosition, int leftStartPosition)
+        {
+            Random rnd = new Random();
+
+            Mat result = new Mat();
+
+
+            // MatchTemplate function
+            CvInvoke.MatchTemplate(img, templ, result, TemplateMatchingType.CcoeffNormed);
+
+            // Normalize the result image into a matrix of floats (thresholds?)
+            double threshold = 1;
+            Mat thresholds = new Mat();
+            CvInvoke.Normalize(result, thresholds, 0, 1, Emgu.CV.CvEnum.NormType.MinMax);
+
+            var rectangles = new List<Rectangle>();
+            var size = new Size(templ.Width, templ.Height);
+
+            // Convert it to a multidimensional array to be able to iterate through it
+            // (is it really necessary, isn't something native in EmguCV for this?)
+            var thresholdData = thresholds.GetData();
+            for (int y = 0; y < thresholdData.GetLength(0); y++)
+            {
+                for (int x = 0; x < thresholdData.GetLength(1); x++)
+                {
+                    var value = (float)thresholdData.GetValue(y, x);
+
+                    if (value >= threshold)
+                    {
+                        rectangles.Add(new Rectangle(x, y, size.Width, size.Height));
+                        //int clickXPosition = leftStartPosition + x + rnd.Next(0, size.Width);
+                        //int clickYPosition = topStartPosition + y - rnd.Next(0, size.Height) * 3;
+                        //KeyMouseHelper.ClickOnPoint(new Point(clickXPosition, clickYPosition));
+                        //Console.WriteLine(value.ToString() + "Click toa do " + clickXPosition.ToString() + ", " + clickYPosition.ToString());
+                    }
+                }
+            }
+
+            // Draw rectangles around the matching positions
+            foreach (var rectangle in rectangles)
+            {
+                CvInvoke.Rectangle(img, rectangle, new MCvScalar(0, 0, 255), 2);
+            }
+
+            // Save the image
+            img.Save("Results\\LOL_Screenshot" + rnd.Next() + ".png");
+        }
 
         public void AutoClick()
         {
@@ -247,7 +282,7 @@ namespace ZangTFT
             //MessageBox.Show(Text);
             
             // Create new thread run AutoClick
-            Thread thread = new Thread(AutoClick);
+            Thread thread = new Thread(OpenCVClick);
             thread.Start();
         }
 
@@ -266,7 +301,7 @@ namespace ZangTFT
 
         private void button2_Click(object sender, EventArgs e)
         {
-            Test();
+            OpenCVClick();
         }
 
         private void button3_Click(object sender, EventArgs e)
