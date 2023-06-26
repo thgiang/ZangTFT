@@ -11,7 +11,6 @@ using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using System.Drawing;
-
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Diagnostics;
 using System.Xml.Linq;
@@ -33,14 +32,14 @@ namespace ZangTFT
         private static extern int GetWindowThreadProcessId(IntPtr handle, out int processId);
 
         IntPtr LOLWindowHandle;
-        List<Mat> champs = new List<Mat>();
+        Dictionary<string, Mat> champs = new Dictionary<string, Mat>();
+        Mat empty = new Mat();
 
         protected override bool ProcessDialogKey(Keys keyData)
         {
             if (keyData == Keys.Escape)
             {
                 Application.Exit();
-                this.Close();
                 return true;
             }
             else
@@ -62,22 +61,24 @@ namespace ZangTFT
 
 
             Mat templ = new Mat();
-            templ = CvInvoke.Imread(@"Champs\Kalista.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Irelia.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\KaiSa.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Maokai.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Samira.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Shen.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Yasuo.png", ImreadModes.Grayscale);
-            champs.Add(templ);
-            templ = CvInvoke.Imread(@"Champs\Warwick.png", ImreadModes.Grayscale);
-            champs.Add(templ);
+            templ = CvInvoke.Imread(@"Champs\Kalista.png", ImreadModes.Unchanged);
+            champs["Kalista"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Irelia.png", ImreadModes.Unchanged);
+            champs["Irelia"] = templ;
+            templ = CvInvoke.Imread(@"Champs\KaiSa.png", ImreadModes.Unchanged);
+            champs["KaiSa"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Maokai.png", ImreadModes.Unchanged);
+            champs["Maokai"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Samira.png", ImreadModes.Unchanged);
+            champs["Samira"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Shen.png", ImreadModes.Unchanged);
+            champs["Shen"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Yasuo.png", ImreadModes.Unchanged);
+            champs["Yasuo"] = templ;
+            templ = CvInvoke.Imread(@"Champs\Warwick.png", ImreadModes.Unchanged);
+            champs["Warwick"] = templ;
+
+            empty = CvInvoke.Imread("empty.png", ImreadModes.Unchanged);
         }
 
         public bool LOLIsActivated()
@@ -91,6 +92,19 @@ namespace ZangTFT
             return activatedHandle == LOLWindowHandle;
         }
 
+        public bool IsEqualImage(Mat image, Mat templ)
+        {
+            // Compare 2 images
+            Mat result = new Mat();
+            CvInvoke.MatchTemplate(image, templ, result, TemplateMatchingType.CcoeffNormed);
+            double[] minValues, maxValues;
+            System.Drawing.Point[] minLocations, maxLocations;
+            result.MinMax(out minValues, out maxValues, out minLocations, out maxLocations);
+
+            // If the match is good enough
+            return maxValues[0] > 0.9;
+        }
+
         public void OpenCVClick()
         {
             string imageName = "Screenshot.png";
@@ -98,73 +112,61 @@ namespace ZangTFT
             int h = 35;
             int left = 472;
             int top = 1042;
-            var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-
             do
             {
+                Thread.Sleep(20);
+
+                // Check if slot is avaiable
+                var slot = new Bitmap(160, 160, PixelFormat.Format32bppArgb);
+                using (Graphics graphicsSlot = Graphics.FromImage(slot))
+                {
+                    graphicsSlot.CopyFromScreen(1305, 705, 0, 0, slot.Size, CopyPixelOperation.SourceCopy);
+                    slot.Save("slot.png", ImageFormat.Png);
+                    Mat slotMat = CvInvoke.Imread("slot.png", ImreadModes.Unchanged);
+                    if (!IsEqualImage(slotMat, empty))
+                    {
+                        continue;
+                    }
+                }
+
+
+                var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
                 using (Graphics graphics = Graphics.FromImage(bmp))
                 {
                     graphics.CopyFromScreen(left, top, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
-                }
+                    bmp.Save(imageName, ImageFormat.Png);
+                    Mat img = CvInvoke.Imread(imageName, ImreadModes.Unchanged);
 
-                bmp.Save(imageName, ImageFormat.Png);
-                Mat img = CvInvoke.Imread(imageName, ImreadModes.Grayscale);
-
-                foreach (Mat champ in champs)
-                {
-                    FindAndClick(champ, img, top, left);
-                    Thread.Sleep(2000); 
+                    foreach (var champ in champs)
+                    {
+                        FindAndClick(champ.Key, img, top, left);
+                    }
                 }
-                Thread.Sleep(3000);
             } while (true);
         }
 
-        public void FindAndClick(Mat templ, Mat img, int topStartPosition, int leftStartPosition)
+        public void FindAndClick(string templName, Mat img, int topStartPosition, int leftStartPosition)
         {
+            Mat templ = champs[templName];
             Random rnd = new Random();
 
             Mat result = new Mat();
 
-
-            // MatchTemplate function
+            // Find the match
             CvInvoke.MatchTemplate(img, templ, result, TemplateMatchingType.CcoeffNormed);
+            double[] minValues, maxValues;
+            System.Drawing.Point[] minLocations, maxLocations;
+            result.MinMax(out minValues, out maxValues, out minLocations, out maxLocations);
 
-            // Normalize the result image into a matrix of floats (thresholds?)
-            double threshold = 1;
-            Mat thresholds = new Mat();
-            CvInvoke.Normalize(result, thresholds, 0, 1, Emgu.CV.CvEnum.NormType.MinMax);
-
-            var rectangles = new List<Rectangle>();
-            var size = new Size(templ.Width, templ.Height);
-
-            // Convert it to a multidimensional array to be able to iterate through it
-            // (is it really necessary, isn't something native in EmguCV for this?)
-            var thresholdData = thresholds.GetData();
-            for (int y = 0; y < thresholdData.GetLength(0); y++)
+            // If the match is good enough
+            if (maxValues[0] > 0.9)
             {
-                for (int x = 0; x < thresholdData.GetLength(1); x++)
-                {
-                    var value = (float)thresholdData.GetValue(y, x);
-
-                    if (value >= threshold)
-                    {
-                        rectangles.Add(new Rectangle(x, y, size.Width, size.Height));
-                        //int clickXPosition = leftStartPosition + x + rnd.Next(0, size.Width);
-                        //int clickYPosition = topStartPosition + y - rnd.Next(0, size.Height) * 3;
-                        //KeyMouseHelper.ClickOnPoint(new Point(clickXPosition, clickYPosition));
-                        //Console.WriteLine(value.ToString() + "Click toa do " + clickXPosition.ToString() + ", " + clickYPosition.ToString());
-                    }
-                }
+                // Click on the match
+                int x = maxLocations[0].X + templ.Width / 2 + leftStartPosition + rnd.Next(-templ.Width / 2, templ.Width / 2);
+                int y = maxLocations[0].Y + templ.Height / 2 + topStartPosition - rnd.Next(0, 50);
+                KeyMouseHelper.ClickOnPoint(new System.Drawing.Point(x, y));
+                Thread.Sleep(50);
             }
-
-            // Draw rectangles around the matching positions
-            foreach (var rectangle in rectangles)
-            {
-                CvInvoke.Rectangle(img, rectangle, new MCvScalar(0, 0, 255), 2);
-            }
-
-            // Save the image
-            img.Save("Results\\LOL_Screenshot" + rnd.Next() + ".png");
         }
 
         public void AutoClick()
@@ -233,7 +235,7 @@ namespace ZangTFT
                             {
                                 int rdX = rnd.Next(20, w / 5 - 20);
                                 int rdY = rnd.Next(10, 40);
-                                KeyMouseHelper.ClickOnPoint(new Point(left + w / 5 * i + rdX, top - rdY));
+                                KeyMouseHelper.ClickOnPoint(new System.Drawing.Point(left + w / 5 * i + rdX, top - rdY));
                                 Thread.Sleep(50);
                             }
                         }
@@ -258,7 +260,7 @@ namespace ZangTFT
 
                 for (int i = 0; i < 5; i++)
                 {
-                    Bitmap crop = bmp.Clone(new Rectangle(left + 9, top + 3, 80, 17), bmp.PixelFormat);
+                    Bitmap crop = bmp.Clone(new System.Drawing.Rectangle(left + 9, top + 3, 80, 17), bmp.PixelFormat);
                     // Save crop to temp file
                     crop.Save("temp.png", ImageFormat.Png);
 
@@ -301,7 +303,9 @@ namespace ZangTFT
 
         private void button2_Click(object sender, EventArgs e)
         {
-            OpenCVClick();
+            // Read image named LOL_Screenshot1041739629
+            Mat img = CvInvoke.Imread("Screenshot\\LOL_Screenshot1041739629.png", ImreadModes.Unchanged);
+            FindAndClick("KaiSa", img, 0, 0);
         }
 
         private void button3_Click(object sender, EventArgs e)
